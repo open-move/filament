@@ -22,6 +22,8 @@ public struct AgentCap has key, store {
 public struct AgentKey(u64) has copy, drop, store;
 public struct AgentCapKey() has copy, drop, store;
 
+public use fun agent_cap_agent_id as AgentCap.agent_id;
+
 public fun create_agent(
     blueprint: &mut Blueprint,
     blueprint_cap: &BlueprintCap,
@@ -64,6 +66,10 @@ public fun assert_valid_cap(agent: &Agent, cap: &AgentCap) {
 
 public fun num_tasks(agent: &Agent): u64 {
     agent.num_tasks
+}
+
+public fun agent_cap_agent_id(cap: &AgentCap): ID {
+    cap.agent_id
 }
 
 public(package) fun increment_num_tasks(agent: &mut Agent) {

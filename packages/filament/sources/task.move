@@ -1,6 +1,6 @@
 module filament::task;
 
-use filament::agent::Agent;
+use filament::agent::{Agent, AgentCap};
 use sui::balance::{Self, Balance};
 use sui::clock::Clock;
 use sui::coin::Coin;
@@ -58,19 +58,24 @@ public fun create(agent: &mut Agent, payload: vector<u8>, fee: Coin<SUI>, expire
     task
 }
 
-public fun mark_started(task: &mut Task, clock: &Clock) {
+public fun mark_started(task: &mut Task, agent_cap: &AgentCap, clock: &Clock) {
     assert!(task.state(clock) == TaskState::Pending, ETaskNotPending);
+    assert!(agent_cap.agent_id() == task.target_agent_id, ETaskNotInProgress);
+    
     task.started_at.fill(clock.timestamp_ms());
 }
 
-public fun mark_completed(task: &mut Task, clock: &Clock) {
+public fun mark_completed(task: &mut Task, agent_cap: &AgentCap, clock: &Clock) {
     assert!(task.state(clock) == TaskState::InProgress, ETaskNotInProgress);
+    assert!(agent_cap.agent_id() == task.target_agent_id, ETaskNotInProgress);
 
     task.completed_at.fill(clock.timestamp_ms());
 }
 
-public fun mark_failed(task: &mut Task, clock: &Clock) {
+public fun mark_failed(task: &mut Task, agent_cap: &AgentCap, clock: &Clock) {
     assert!(task.state(clock) == TaskState::InProgress, ETaskNotInProgress);
+    assert!(agent_cap.agent_id() == task.target_agent_id, ETaskNotInProgress);
+    
     task.failed_at.fill(clock.timestamp_ms());
 }
 
