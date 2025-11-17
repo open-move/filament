@@ -12,6 +12,7 @@ public struct Blueprint has key, store {
     id: UID,
     name: String,
     base_fee: u64,
+    num_agents: u64,
     enclave_config_id: ID,
 }
 
@@ -33,6 +34,7 @@ public fun create_blueprint(
         id: object::new(ctx),
         name,
         base_fee,
+        num_agents: 0,
         enclave_config_id: object::id(enclave_config),
     };
 
@@ -56,18 +58,31 @@ public fun base_fee(blueprint: &Blueprint): u64 {
     blueprint.base_fee
 }
 
+public fun num_agents(blueprint: &Blueprint): u64 {
+    blueprint.num_agents
+}
+
 public fun update_base_fee(blueprint: &mut Blueprint, cap: &BlueprintCap, new_fee: u64) {
-    assert_valid_cap(blueprint, cap);
+    blueprint.assert_valid_cap(cap);
     blueprint.base_fee = new_fee;
 }
 
 public fun update_name(blueprint: &mut Blueprint, cap: &BlueprintCap, new_name: String) {
-    assert_valid_cap(blueprint, cap);
+    blueprint.assert_valid_cap(cap);
     blueprint.name = new_name;
 }
 
-fun assert_valid_cap(blueprint: &Blueprint, cap: &BlueprintCap) {
+public fun increment_num_agents(blueprint: &mut Blueprint, cap: &BlueprintCap) {
+    blueprint.assert_valid_cap(cap);
+    blueprint.num_agents = blueprint.num_agents + 1;
+}
+
+public fun assert_valid_cap(blueprint: &Blueprint, cap: &BlueprintCap) {
     assert!(object::id(blueprint) == cap.blueprint_id, EInvalidCapability);
+}
+
+public(package) fun extend(blueprint: &mut Blueprint): &mut UID {
+    &mut blueprint.id
 }
 
 #[allow(lint(share_owned))]
