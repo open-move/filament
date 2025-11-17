@@ -5,6 +5,7 @@ use sui::balance::{Self, Balance};
 use sui::clock::Clock;
 use sui::coin::Coin;
 use sui::derived_object;
+use sui::event;
 use sui::sui::SUI;
 
 const ETaskNotPending: u64 = 0;
@@ -31,13 +32,29 @@ public struct Task has key {
 
 public struct TaskKey(u64) has copy, drop, store;
 
-public fun state(task: &Task, clock: &Clock): TaskState {
-    if (task.completed_at.is_some()) return TaskState::Completed;
-    if (task.failed_at.is_some()) return TaskState::Failed;
+public struct TaskCreated has copy, drop {
+    task_id: ID,
+    agent_id: ID,
+    expires_at: u64,
+    fee_amount: u64,
+}
 
-    if (clock.timestamp_ms() > task.expires_at) return TaskState::Expired;
-    if (task.started_at.is_some()) return TaskState::InProgress;
-    TaskState::Pending
+public struct TaskStarted has copy, drop {
+    task_id: ID,
+    agent_id: ID,
+    started_at: u64,
+}
+
+public struct TaskCompleted has copy, drop {
+    task_id: ID,
+    agent_id: ID,
+    completed_at: u64,
+}
+
+public struct TaskFailed has copy, drop {
+    task_id: ID,
+    agent_id: ID,
+    failed_at: u64,
 }
 
 public fun create(agent: &mut Agent, payload: vector<u8>, fee: Coin<SUI>, expires_at: u64): Task {
@@ -55,28 +72,66 @@ public fun create(agent: &mut Agent, payload: vector<u8>, fee: Coin<SUI>, expire
     };
 
     agent.increment_num_tasks();
+
+    event::emit(TaskCreated {
+        task_id: object::id(&task),
+        agent_id: task.target_agent_id,
+        expires_at: task.expires_at,
+        fee_amount: balance::value(&task.fee_pool),
+    });
+
     task
 }
 
 public fun mark_started(task: &mut Task, agent_cap: &AgentCap, clock: &Clock) {
     assert!(task.state(clock) == TaskState::Pending, ETaskNotPending);
     assert!(agent_cap.agent_id() == task.target_agent_id, ETaskNotInProgress);
-    
-    task.started_at.fill(clock.timestamp_ms());
+
+    let timestamp = clock.timestamp_ms();
+    task.started_at.fill(timestamp);
+
+    event::emit(TaskStarted {
+        task_id: object::id(task),
+        agent_id: task.target_agent_id,
+        started_at: timestamp,
+    });
 }
 
 public fun mark_completed(task: &mut Task, agent_cap: &AgentCap, clock: &Clock) {
     assert!(task.state(clock) == TaskState::InProgress, ETaskNotInProgress);
     assert!(agent_cap.agent_id() == task.target_agent_id, ETaskNotInProgress);
 
-    task.completed_at.fill(clock.timestamp_ms());
+    let timestamp = clock.timestamp_ms();
+    task.completed_at.fill(timestamp);
+
+    event::emit(TaskCompleted {
+        task_id: object::id(task),
+        agent_id: task.target_agent_id,
+        completed_at: timestamp,
+    });
 }
 
 public fun mark_failed(task: &mut Task, agent_cap: &AgentCap, clock: &Clock) {
     assert!(task.state(clock) == TaskState::InProgress, ETaskNotInProgress);
     assert!(agent_cap.agent_id() == task.target_agent_id, ETaskNotInProgress);
-    
-    task.failed_at.fill(clock.timestamp_ms());
+
+    let timestamp = clock.timestamp_ms();
+    task.failed_at.fill(timestamp);
+
+    event::emit(TaskFailed {
+        task_id: object::id(task),
+        agent_id: task.target_agent_id,
+        failed_at: timestamp,
+    });
+}
+
+public fun state(task: &Task, clock: &Clock): TaskState {
+    if (task.completed_at.is_some()) return TaskState::Completed;
+    if (task.failed_at.is_some()) return TaskState::Failed;
+
+    if (clock.timestamp_ms() > task.expires_at) return TaskState::Expired;
+    if (task.started_at.is_some()) return TaskState::InProgress;
+    TaskState::Pending
 }
 
 public fun target_agent_id(task: &Task): ID {
@@ -98,8 +153,6 @@ public fun expires_at(task: &Task): u64 {
 public fun started_at(task: &Task): Option<u64> {
     task.started_at
 }
-
-// ======== Entry Functions ========
 
 #[allow(lint(share_owned))]
 entry fun create_entry(agent: &mut Agent, payload: vector<u8>, fee: Coin<SUI>, expires_at: u64) {
